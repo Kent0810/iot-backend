@@ -24,10 +24,11 @@ app.add_middleware(
 load_dotenv()
 my_env_var = os.getenv("MY_ENV_VAR")
 
-
 AIO_CHART_FEED_ID = ["temperature", "humidity"]
 
 AIO_SCHED_FEED_ID = ["schedules"]
+
+
 
 # Getting Latest Value
 mqttClient = MQTTClient(ADAFRUIT_IO_USERNAME , ADAFRUIT_IO_KEY)
@@ -71,7 +72,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if feed_id in AIO_CHART_FEED_ID:
                         response[feed_id] = aio.receive(feed_id).value
                     elif feed_id in AIO_SCHED_FEED_ID:
-                        response[feed_id] = aio.receive(feed_id).value
+                        response[feed_id] = json.loads(aio.receive(feed_id).value)
                     feed_data[feed_id] = False
             if response:
                 await websocket.send_json(response)
@@ -84,9 +85,13 @@ async def websocket_endpoint(websocket: WebSocket):
         
 @app.get("/latest-data")
 def get_latest_data():
+    print("data")
     data={}
     for feed_id in AIO_CHART_FEED_ID + AIO_SCHED_FEED_ID:
-        data[feed_id] = aio.receive(feed_id).value
+        if feed_id != "schedules":
+            data[feed_id] = aio.receive(feed_id).value
+        else:
+            data[feed_id] = json.loads(aio.receive(feed_id).value)
     print(data)
     return data
 
@@ -100,10 +105,11 @@ def get_chart_data():
 @app.post("/scheduler")
 async def post_scheduler(request: Request):
     try:
-        scheduler = await request.json()
-        print(scheduler)
-        scheduler_in_string = json.dumps(scheduler)
+        schedulers = await request.json()
+        print(schedulers)
+        scheduler_in_string = json.dumps(schedulers)
         aio.create_data("schedules", Data(value=scheduler_in_string))
+        
         return {"message": "Scheduler data saved successfully"}
     except Exception as e:
         error_message = f"An error occurred while processing the request: {str(e)}"
