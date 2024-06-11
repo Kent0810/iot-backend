@@ -2,21 +2,32 @@
 
 import sys, asyncio, json, os
 from fastapi import FastAPI, WebSocket, Request, responses, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from Adafruit_IO import Client, Feed, MQTTClient, Data
 from dotenv import load_dotenv
 
 # FastAPI app
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",  # Replace with your frontend URL
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 load_dotenv()
 my_env_var = os.getenv("MY_ENV_VAR")
 
-ADAFRUIT_IO_USERNAME = os.getenv("ADAFRUIT_IO_USERNAME")
-ADAFRUIT_IO_KEY = os.getenv("ADAFRUIT_IO_KEY")
 
 AIO_CHART_FEED_ID = ["temperature", "humidity"]
 
-AIO_SCHED_FEED_ID = ["scheduler"]
+AIO_SCHED_FEED_ID = ["schedules"]
 
 # Getting Latest Value
 mqttClient = MQTTClient(ADAFRUIT_IO_USERNAME , ADAFRUIT_IO_KEY)
@@ -70,6 +81,14 @@ async def websocket_endpoint(websocket: WebSocket):
         
     except WebSocketDisconnect:
         print("WebSocket connection closed")
+        
+@app.get("/latest-data")
+def get_latest_data():
+    data={}
+    for feed_id in AIO_CHART_FEED_ID + AIO_SCHED_FEED_ID:
+        data[feed_id] = aio.receive(feed_id).value
+    print(data)
+    return data
 
 @app.get("/chart-data")
 def get_chart_data():    
@@ -84,7 +103,7 @@ async def post_scheduler(request: Request):
         scheduler = await request.json()
         print(scheduler)
         scheduler_in_string = json.dumps(scheduler)
-        aio.create_data("scheduler", Data(value=scheduler_in_string))
+        aio.create_data("schedules", Data(value=scheduler_in_string))
         return {"message": "Scheduler data saved successfully"}
     except Exception as e:
         error_message = f"An error occurred while processing the request: {str(e)}"
